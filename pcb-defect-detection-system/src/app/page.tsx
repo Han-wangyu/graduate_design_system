@@ -1,6 +1,8 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react'; // 导入 useEffect
+import { useSession, signOut } from 'next-auth/react'; // 导入 useSession 和 signOut
+import { useRouter } from 'next/navigation'; // 导入 useRouter
 
 interface Defect {
   type: string;
@@ -21,11 +23,30 @@ interface DetectionResult {
 }
 
 export default function HomePage() {
+  const { data: session, status } = useSession(); // 获取会话状态
+  const router = useRouter(); // 获取 router 实例
+
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // 如果未认证，则重定向到登录页面
+  useEffect(() => {
+    if (status === 'unauthenticated') {
+      router.push('/auth/signin');
+    }
+  }, [status, router]);
+
+  // 如果正在加载会话或未认证，则显示加载状态
+  if (status === 'loading' || status === 'unauthenticated') {
+    return (
+      <div className="flex min-h-screen flex-col items-center justify-center bg-gray-900 text-white">
+        <p>Loading...</p>
+      </div>
+    );
+  }
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -91,8 +112,19 @@ export default function HomePage() {
   };
   return (
     <div className="flex flex-col min-h-screen bg-gray-900 text-white">
-      <header className="bg-gray-800 shadow-md p-4">
-        <h1 className="text-3xl font-bold text-center text-teal-400">PCB Defect Detection System</h1>
+      <header className="bg-gray-800 shadow-md p-4 flex justify-between items-center"> {/* 修改 header 以包含登出按钮 */}
+        <h1 className="text-3xl font-bold text-teal-400">PCB Defect Detection System</h1>
+        {session && (
+          <div className="flex items-center">
+            <p className="mr-4 text-gray-300">Welcome, {session.user?.name || session.user?.email}</p>
+            <button 
+              onClick={() => signOut()} 
+              className="bg-red-500 hover:bg-red-600 text-white font-bold py-2 px-4 rounded-lg transition-colors"
+            >
+              Sign Out
+            </button>
+          </div>
+        )}
       </header>
 
       <main className="flex-grow container mx-auto p-8 grid grid-cols-1 md:grid-cols-2 gap-8 items-start">
@@ -113,7 +145,6 @@ export default function HomePage() {
             disabled={isLoading}
           >
             {isLoading ? 'Detecting...' : 'Upload & Detect'}
-            Upload & Detect
           </button>
         </div>
 

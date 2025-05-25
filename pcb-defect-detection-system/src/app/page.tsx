@@ -16,8 +16,8 @@ interface Defect {
 }
 
 interface DetectionResult {
-  originalImage: string;
-  detectedImage: string;
+  originalImage: string; // Should be a base64 encoded image string
+  detectedImage: string; // Should be a base64 encoded image string
   defects: Defect[];
   processingTime: number;
 }
@@ -31,6 +31,10 @@ export default function HomePage() {
   const [result, setResult] = useState<DetectionResult | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [email, setEmail] = useState('');
+  const [isSendingReport, setIsSendingReport] = useState(false);
+  const [reportError, setReportError] = useState<string | null>(null);
+  const [reportSuccess, setReportSuccess] = useState<string | null>(null);
 
   // 如果未认证，则重定向到登录页面
   useEffect(() => {
@@ -82,6 +86,9 @@ export default function HomePage() {
       }
 
       const data: DetectionResult = await response.json();
+      // Ensure that data.originalImage and data.detectedImage are base64 encoded strings
+      // If they are URLs, they need to be converted to base64 before being set to the result
+      // For this example, we assume the /api/detect endpoint already returns base64 strings.
       setResult(data);
     } catch (err: any) {
       setError(err.message || 'An unknown error occurred.');
@@ -105,6 +112,48 @@ export default function HomePage() {
   const handleDragOver = (event: React.DragEvent<HTMLDivElement>) => {
     event.preventDefault();
     event.stopPropagation();
+  };
+
+  const handleGenerateAndSendReport = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!result) {
+      setReportError('Please perform a detection first to generate a report.');
+      return;
+    }
+    if (!email) {
+      setReportError('Please enter an email address to send the report.');
+      return;
+    }
+
+    setIsSendingReport(true);
+    setReportError(null);
+    setReportSuccess(null);
+
+    try {
+      // Get user name from session if available
+      const userName = session?.user?.name || session?.user?.email;
+
+      const response = await fetch('/api/send-report', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email, detectionData: result, userName }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || 'Failed to send report');
+      }
+
+      const responseData = await response.json();
+      setReportSuccess(responseData.message || `Report successfully sent to ${email}.`);
+      setEmail(''); // Clear email input on success
+    } catch (err: any) {
+      setReportError(err.message || 'An unknown error occurred while sending the report.');
+    } finally {
+      setIsSendingReport(false);
+    }
   };
 
   const openFileDialog = () => {
@@ -191,6 +240,44 @@ export default function HomePage() {
             </div>
           )}
         </div>
+
+        {/* Report Generation Section */}
+        {result && (
+          <div className="md:col-span-2 bg-gray-800 p-6 rounded-lg shadow-xl mt-8">
+            <h2 className="text-2xl font-semibold mb-4 text-teal-300">Generate & Send Report</h2>
+            <form onSubmit={handleGenerateAndSendReport} className="space-y-4">
+              <div>
+                <label htmlFor="email" className="block text-sm font-medium text-gray-300">
+                  Email Address for Report
+                </label>
+                <input
+                  id="email"
+                  name="email"
+                  type="email"
+                  autoComplete="email"
+                  required
+                  value={email}
+                  onChange={(e) => setEmail(e.target.value)}
+                  className="mt-1 block w-full rounded-md border-gray-600 bg-gray-700 px-3 py-2 text-white shadow-sm focus:border-teal-500 focus:ring-teal-500 sm:text-sm"
+                  placeholder="your.email@example.com"
+                />
+              </div>
+              {reportError && <p className="text-sm text-red-500">Error: {reportError}</p>}
+              {reportSuccess && <p className="text-sm text-green-400">{reportSuccess}</p>}
+              <div>
+                <button
+                  type="submit"
+                  disabled={isSendingReport || !result}
+                  className={`w-full bg-indigo-500 hover:bg-indigo-600 text-white font-bold py-3 px-4 rounded-lg transition-colors ${
+                    isSendingReport || !result ? 'opacity-50 cursor-not-allowed' : ''
+                  }`}
+                >
+                  {isSendingReport ? 'Sending Report...' : 'Generate & Send PDF Report'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </main>
 
       <footer className="bg-gray-800 shadow-md p-4 mt-auto">
